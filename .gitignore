@@ -1,0 +1,5 @@
+# Ignore local CSV database files
+*.csv
+
+Ignore all bat files
+*.bat

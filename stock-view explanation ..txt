@@ -1,0 +1,94 @@
+What is the Stock View?
+Based on my images, the Stock View is a detail page for a specific stock item (in this case "RICE" belonging to my organization "Cara Women"). It shows:
+
+How much I've contributed toward a stock goal
+How many people contributed
+What percentage of my target has been reached
+A list of all my contributors with their names and amounts
+My ability to add, edit or remove contributors
+
+Think of it like a fundraising tracker — "I need ₦20,000 worth of Rice, here's who contributed and how much"
+
+My Step-by-Step Plan to Build It
+
+Step 1 — Set up my main window
+
+I create my Tk() window
+I set a dark background color
+I divide my window into a left sidebar and a main content area using .grid() with 2 columns
+
+
+Step 2 — Build my Sidebar (Frame 3)
+
+I create a tall narrow Frame on the left
+I stack 4 icon Buttons vertically using .pack()
+I highlight the active one differently
+
+
+Step 3 — Build my Top Header (Frame 1)
+
+I create a Frame at the top of my main content area
+I add a breadcrumb Label → "Home > cara women > rice"
+I add RICE as a big bold Label centered at the top
+Below that, I create 3 smaller Frames side by side:
+
+Each has a title Label on top and a number Label below
+My Target Reached box gets a blue border to highlight it
+
+
+Below those 3 boxes, I add a Label showing "Contributed: ₦8000 / 20000"
+Next to it, I add an Edit Button
+
+
+Step 4 — Build my Contributor Table (Frame 2)
+
+I create another Frame below Frame 1
+First row inside it:
+
+Label saying CONTRIBUTOR STATUS
+Entry box for search
+Green Button for + Contributor
+Purple Button for Export
+
+
+Below that, I use ttk.Treeview with 4 columns:
+
+ID, NAME, AMOUNT, UPDATE/REMOVE
+
+
+For my EDIT and REMOVE actions per row I either:
+
+Put text "EDIT | REMOVE" in the last column and detect clicks
+Or show Buttons in a separate popup when a row is selected
+
+
+I add a Scrollbar on the right side of my table
+
+
+Step 5 — Connect my Data
+
+I store my contributor data in a list of dictionaries like:
+
+[{id: "C02", name: "Adenike", amount: 2000}, ...]
+
+I loop through it to insert rows into my Treeview
+When I click Edit, I open a small Toplevel popup with an Entry to update the amount
+When I click Remove, I delete that row from my list and refresh the table
+When I click + Contributor, I open another Toplevel to fill in name and amount
+
+
+Step 6 — Make my Stats Update Automatically
+
+After every add/edit/remove action, I recalculate:
+
+Quantity → total number of items or total amount
+Contributors → count of rows
+Target Reached → (total contributed ÷ target) × 100
+
+
+I update the Labels in my Frame 1 with the new values using .config(text=...)
+
+
+My flow in simple terms:
+
+My sidebar stays fixed → my header shows live stats → my table shows contributors → every change I make to the table updates my header automatically

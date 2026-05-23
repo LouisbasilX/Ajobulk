@@ -91,6 +91,18 @@ class DashboardFrame(BaseFrame):
         self.app.make_button(bottom, "DELETE", BTN_RED, command=lambda o=org: self._delete_org(o), width=10).pack(side="right")
 
    
+   
+    def _scroll_up(self):
+        if self._page > 0:
+            self._page -= 1
+            self._render_org_list()
+
+    def _scroll_down(self):
+        page_size = 2
+        max_page = max(0, (len(self._orgs)-1)//page_size)
+        if self._page < max_page:
+            self._page += 1
+            self._render_org_list()
 
     def _open_create_org(self):
         CreateOrgModal(self, on_success=self._load_data)

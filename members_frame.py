@@ -122,7 +122,17 @@ class MembersFrame(BaseFrame):
             width=8
         ).pack(side="right")
 
-   
+    def _scroll_up(self):
+        if self._page > 0:
+            self._page -= 1
+            self._render_member_list()
+
+    def _scroll_down(self):
+        page_size = 5
+        max_page = max(0, (len(self._filtered_members) - 1) // page_size)
+        if self._page < max_page:
+            self._page += 1
+            self._render_member_list()
 
     def _open_add_member(self):
         self._open_member_modal()

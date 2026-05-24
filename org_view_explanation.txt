@@ -1,0 +1,2 @@
+This view displays an organization's info with a list of its stocks and 
+an option to create or delete a stock. 

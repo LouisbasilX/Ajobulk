@@ -5,7 +5,7 @@ from datetime import datetime
 path = "database_folder"
 files = {"organizations.csv": "org_id,name,created_date\n",
           "members.csv":"member_id,fullname,phone_number,date_registered\n",
-          "stocks.csv":"stock_id,org_id,product_name,target_quantity,estimated_price,contributed_amount\n",
+          "stocks.csv":"stock_id,org_id,product_name,unit,target_quantity,estimated_price,contributed_amount\n",  # added unit
           "stock_contributions.csv": "contribution_id,stock_id,member_id,amount_paid,quantity_due,last_updated\n",
           "settings.csv": "id,biz_name,terms,backup_path,export_path\n"
 }
@@ -110,7 +110,11 @@ def update_record(filename,id,new_value):
           record_id = record_list[0]
           if record_id == id:
               records[i] = new_value
-              new_record = f"{content['header']}\n{'\n'.join(records)}\n"
+              # 1. Join the records together first
+              joined_records = '\n'.join(records)
+
+              # 2. Drop it into the f-string (and we can tuck that trailing newline in there too!)
+              new_record = f"{content['header']}\n{joined_records}\n"
               overwrite_file(filename, new_record)      
 
 def delete_record(filename, id):
@@ -121,7 +125,8 @@ def delete_record(filename, id):
           record_id = record_list[0]
           if record_id == id:
               records.remove(record)
-              new_record = f"{content['header']}\n{'\n'.join(records)}"
+              joined_records = '\n'.join(records)
+              new_record = f"{content['header']}\n{joined_records}"
               overwrite_file(filename, new_record) 
               break
 
@@ -150,7 +155,7 @@ def init_database():
   for filename, header in files.items():
       init_file(filename, header)
   append_to_file(f"settings.csv", "1,untitled,no terms,backup_folder,export_folder\n")    
-
+init_database()
 
 def reset_database():
     for filename in files:
@@ -225,19 +230,31 @@ def delete_organization(org_id):
           delete_stock(stock_id)
      delete_record("organizations.csv", org_id)     
 
+def get_all_orgs():
+    orgs = get_all_records("organizations.csv")
+    result = []
+    for org in orgs:
+        metrics = get_org_metrics(org['org_id'])
+        if metrics:   # ensure we got valid data
+            result.append({
+                'id': org['org_id'],
+                'name': org['name'],
+                'date_founded': org['created_date'],
+                'member_count': metrics.get('MEMBERS_INVOLVED', 0)
+            })
+    return result     
 
 
 
 # Organization View Functions
-def add_stock(name, org_id,target_qunatity,estimated_price ):
-     new_id = get_new_id("stocks.csv")
-     stocks = get_all_records("stocks.csv")
-     for stock in stocks:
-          if org_id == stock['org_id'] and name == stock['product_name']:
-               return 'Error Stock name already exists'
-     
-     add_record('stocks.csv', f'{new_id},{org_id},{name},{target_qunatity},{estimated_price},0\n')
-     return 'Stock added successfully'
+def add_stock(name, org_id, unit, target_quantity, estimated_price):
+    new_id = get_new_id("stocks.csv")
+    stocks = get_all_records("stocks.csv")
+    for stock in stocks:
+        if org_id == stock['org_id'] and name == stock['product_name']:
+            return 'Error Stock name already exists'
+    add_record('stocks.csv', f'{new_id},{org_id},{name},{unit},{target_quantity},{estimated_price},0\n')
+    return 'Stock added successfully'
 
 #Get Org Stocks
 def get_org_stocks(org_id):
@@ -290,15 +307,32 @@ def get_stock_contributions(stock_id):
      return res      
 
 #edit stock
-def edit_stock(stock_id, name,target_qunatity,estimated_price):
-     current_stock_record = get_record("stocks.csv", stock_id)
-     org_id = current_stock_record['org_id']
-     new_record =  f"{stock_id},{org_id},{name},{target_qunatity},{estimated_price},{current_stock_record['contributed_amount']}"
-     update_record('stocks.csv', stock_id, new_record)
-     contributions = get_stock_contributions(stock_id)
-     for contribution in contributions:
-          edit_contribution(contribution['contribution_id'], contribution['amount_paid'])
+def edit_stock(stock_id, name, unit, target_quantity, estimated_price):
+    """
+    Edit stock details and recalculate quantity dues for all contributors.
+    """
+    # Get current stock record
+    current_stock = get_record("stocks.csv", stock_id)
+    if not current_stock:
+        print(f"Stock {stock_id} not found")
+        return
 
+    org_id = current_stock['org_id']
+    
+    # Keep the same contributed amount
+    contributed_amount = current_stock['contributed_amount']
+    
+    # Create the updated stock record
+    new_record = (
+        f"{stock_id},{org_id},{name},{unit},{target_quantity},"
+        f"{estimated_price},{contributed_amount}"
+    )
+    update_record("stocks.csv", stock_id, new_record)
+    
+    # Recalculate quantity dues for all contributions of this stock
+    # because target_quantity or estimated_price may have changed
+    recalculate_quantity_dues(stock_id)
+     
 # add contributions to stock function
 def add_contributions(stock_id, member_ids):
      last_updated,quantity_due,amount_paid = time(),0,0
@@ -306,23 +340,80 @@ def add_contributions(stock_id, member_ids):
           contribution_id = get_new_id("stock_contributions.csv")
           add_record("stock_contributions.csv", f"{contribution_id},{stock_id},{member_id},{amount_paid},{quantity_due},{last_updated}\n")
 
-back_up_database(False)
-
 # edit contributions
 def edit_contribution(contribution_id, new_amount):
-     contribution = get_record("stock_contributions.csv", contribution_id)
-     if contribution == {}: return
-     stock = get_record("stocks.csv", contribution['stock_id'])
-     
-     prev_amount = int(contribution['amount_paid'])
-     change = int(new_amount) - prev_amount
+    """
+    Update a member's contribution amount for a stock.
+    Automatically recalculates quantity dues for all contributors of that stock.
+    """
+    # Get the contribution record
+    contribution = get_record("stock_contributions.csv", contribution_id)
+    if not contribution:
+        print(f"Contribution {contribution_id} not found")
+        return
 
-     new_contributed_amount = int(stock['contributed_amount']) + change
-     new_quantity_due = (int(new_amount) / int(stock['estimated_price'])) * int(stock['target_quantity'] )
-     
-     last_updated = time()
-     update_record("stocks.csv", stock['stock_id'], f"{stock['stock_id']},{stock['org_id']},{stock['product_name']},{stock['target_quantity']},{stock['estimated_price']},{new_contributed_amount}")
-     update_record("stock_contributions.csv", contribution['contribution_id'],f"{contribution_id},{contribution['stock_id']},{contribution['member_id']},{new_amount},{new_quantity_due},{last_updated}")
+    # Get the associated stock
+    stock = get_record("stocks.csv", contribution['stock_id'])
+    if not stock:
+        print(f"Stock {contribution['stock_id']} not found")
+        return
+
+    # Convert to float for calculations
+    prev_amount = float(contribution['amount_paid'])
+    new_amount_float = float(new_amount)
+    change = new_amount_float - prev_amount
+
+    # Update stock's total contributed amount
+    new_total_contributed = float(stock['contributed_amount']) + change
+
+    # Update the stock record (preserve existing fields)
+    stock_update = (
+        f"{stock['stock_id']},{stock['org_id']},{stock['product_name']},"
+        f"{stock.get('unit', 'Kg')},{stock['target_quantity']},{stock['estimated_price']},{new_total_contributed}"
+    )
+    update_record("stocks.csv", stock['stock_id'], stock_update)
+
+    # Update the contribution record (amount_paid only, quantity_due will be recalculated)
+    contrib_update = (
+        f"{contribution_id},{contribution['stock_id']},{contribution['member_id']},"
+        f"{new_amount_float},0,{time()}"  # quantity_due set to 0, will be recomputed
+    )
+    update_record("stock_contributions.csv", contribution_id, contrib_update)
+
+    # Recalculate quantity dues for all contributions of this stock
+    recalculate_quantity_dues(stock['stock_id'])
+
+
+def recalculate_quantity_dues(stock_id):
+    """Recalculate quantity_due for all contributions of a stock."""
+    stock = get_record("stocks.csv", stock_id)
+    if not stock:
+        return
+    
+    contributions = get_stock_contributions(stock_id)
+    if not contributions:
+        return
+    
+    # Get key values as floats
+    total_contributed = float(stock['contributed_amount'])
+    target_total_value = float(stock['estimated_price'])   # total target amount (₦)
+    target_quantity = float(stock['target_quantity'])
+    
+    # Decide formula
+    if total_contributed <= target_total_value:
+        # Not yet reached target: quantity due = (amount_paid / target_value) * target_quantity
+        for c in contributions:
+            amount = float(c['amount_paid'])
+            qty_due = (amount / target_total_value) * target_quantity if target_total_value > 0 else 0
+            new_record = f"{c['contribution_id']},{c['stock_id']},{c['member_id']},{c['amount_paid']},{qty_due},{time()}"
+            update_record("stock_contributions.csv", c['contribution_id'], new_record)
+    else:
+        # Over‑contributed: quantity due = (amount_paid / total_contributed) * target_quantity
+        for c in contributions:
+            amount = float(c['amount_paid'])
+            qty_due = (amount / total_contributed) * target_quantity
+            new_record = f"{c['contribution_id']},{c['stock_id']},{c['member_id']},{c['amount_paid']},{qty_due},{time()}"
+            update_record("stock_contributions.csv", c['contribution_id'], new_record)
 
 
 #Delete Stock contribution
@@ -331,7 +422,7 @@ def delete_contribution(contribution_id):
      
      if contribution == {}: return
      stock =  get_record("stocks.csv", contribution['stock_id'])
-     new_contributed_amount = int(stock['contributed_amount']) - int(contribution['amount_paid'])
+     new_contributed_amount = float(stock['contributed_amount']) - float(contribution['amount_paid'])
      update_record("stocks.csv", contribution['stock_id'], f"{stock['stock_id']},{stock['org_id']},{stock['product_name']},{stock['target_quantity']},{stock['estimated_price']},{new_contributed_amount}")
      delete_record("stock_contributions.csv", contribution['contribution_id'])
 
@@ -467,18 +558,20 @@ def export_stock_report(stock_id):
     ]]
 
     for contribution in contributions:
-
-        member = get_record(
-            "members.csv",
-            contribution['member_id']
-        )
-
-        table_data.append([
-            member['fullname'],
-            contribution['amount_paid'],
-            contribution['quantity_due'],
-            contribution['last_updated']
-        ])
+     member = get_record("members.csv", contribution['member_id'])
+     if not member:
+        continue
+    
+     # Format quantity due to 2 decimal places
+     qty_due = float(contribution['quantity_due'])
+     qty_due_str = f"{qty_due:.2f}"
+    
+     table_data.append([
+        member['fullname'],
+        contribution['amount_paid'],
+        qty_due_str,
+        contribution['last_updated']
+     ])
 
     # create table
     table = Table(table_data)
@@ -510,9 +603,8 @@ def export_stock_report(stock_id):
     print(f"Stock report exported successfully")
     print(f"Saved to: {export_path}")
      
-
-
-
+def get_all_members():
+    return get_all_records('members.csv')
 
 
 

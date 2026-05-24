@@ -111,6 +111,8 @@ class StockFrame(BaseFrame):
         self._filter_contributions()
         self._update_stats()
         self._update_breadcrumb()
+        add_quick_link(self.stock_id, self.stock['product_name'], self.org['name'])
+        self.app.load_quick_links_from_json()
 
     def _update_breadcrumb(self):
         for widget in self.breadcrumb_frame.winfo_children():
@@ -213,16 +215,30 @@ class StockFrame(BaseFrame):
             self._render_contributors()
 
     def _edit_stock(self):
-        pass
+        def refresh():
+            self._load_data()
+        EditStockModal(self, self.stock_id, self.stock, on_success=refresh)
 
     def _open_add_contributor(self):
-        pass
+        def refresh():
+            self._load_data()
+        AddContributorModal(self, self.stock_id, on_contributors_added=refresh)
 
     def _edit_contribution(self, contrib):
-        pass
+        member = db.get_record("members.csv", contrib['member_id'])
+        def refresh():
+            self._load_data()
+        EditContributionModal(self, contrib['contribution_id'], member['fullname'],
+                              contrib['amount_paid'], on_success=refresh)
 
     def _remove_contribution(self, contrib):
-        pass
+        if messagebox.askyesno("Remove Contribution", "Remove this contributor's payment?"):
+            db.delete_contribution(contrib['contribution_id'])
+            self._load_data()
 
     def _export_report(self):
-        pass
+        try:
+            db.export_stock_report(self.stock_id)
+            messagebox.showinfo("Export", f"Report exported to {db.get_record('settings.csv','1')['export_path']}")
+        except Exception as e:
+            messagebox.showerror("Export Error", str(e))

@@ -1,0 +1,1 @@
+The dashboard frame displays organizaitions, a new or button and quicklinks.

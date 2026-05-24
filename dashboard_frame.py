@@ -3,6 +3,7 @@ import tkinter as tk
 from base_window import BaseFrame, BTN_GREEN, BTN_BLUE, BTN_RED, BG_CARD, TEXT_WHITE, TEXT_LIGHT
 from modals.create_org_modal import CreateOrgModal
 from settings_manager import get_quick_links
+from tkinter import messagebox
 
 class DashboardFrame(BaseFrame):
     def __init__(self, parent, controller):
@@ -90,8 +91,6 @@ class DashboardFrame(BaseFrame):
         self.app.make_button(bottom, "OPEN", BTN_BLUE, command=lambda o=org: self._open_org(o), width=10).pack(side="right", padx=(6,0))
         self.app.make_button(bottom, "DELETE", BTN_RED, command=lambda o=org: self._delete_org(o), width=10).pack(side="right")
 
-   
-   
     def _scroll_up(self):
         if self._page > 0:
             self._page -= 1
@@ -113,6 +112,7 @@ class DashboardFrame(BaseFrame):
         self.app.show_frame(OrgFrame, org_id=org["id"])
 
     def _delete_org(self, org):
-        from backend_logic import delete_org
-        delete_org(org["id"])
-        self._load_data()
+        from backend_logic import delete_organization
+        if messagebox.askyesno("Delete Organization", f"Delete Organization '{org['name']}'?\nAll stocks and contributions to them will be deleted."):
+            delete_organization(org['id'])
+            self._load_data()
